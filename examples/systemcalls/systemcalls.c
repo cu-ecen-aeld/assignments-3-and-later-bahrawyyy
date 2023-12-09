@@ -17,6 +17,27 @@ bool do_system(const char *cmd)
  *   or false() if it returned a failure
 */
 
+    int SystemCall_Status = system(cmd);
+
+
+    if(SystemCall_Status == -1)
+    {
+    	perror("System failed");
+    	return false;
+    	// returns a non-zero value if the child process terminated normally
+    }else if(WIFEXITED(SystemCall_Status))
+    {
+    	if(WEXITSTATUS(SystemCall_Status) != 0)
+    	{
+    		// Exit with non-zero status
+    		fprintf(stderr, "Command exited with non-zero status: %d\n",WEXITSTATUS(SystemCall_Status));
+    		return false;
+    	}
+    
+    }
+
+
+    // No errors occured and the command exited with status 0
     return true;
 }
 
@@ -59,6 +80,55 @@ bool do_exec(int count, ...)
  *
 */
 
+	// Check if the command has an absolute path
+    if (command[0][0] != '/') {
+        fprintf(stderr, "Error: Command '%s' must be specified with an absolute path.\n", command[0]);
+        va_end(args);
+        return false;
+    }
+
+
+    pid_t pid = fork();
+    
+    if(pid == -1)
+    {
+    	// Fork failed
+    	perror("fork");
+    	va_end(args);
+    	return false;
+    }
+
+
+    if(pid == 0)
+    {
+    	// Executed by child process
+    	execv(command[0], command);
+    	
+    	// If execv() fails
+    	perror("execv");
+    	va_end(args);
+    	return false;
+    }
+    else {
+    	// This code is executed by the parent 
+    	
+    	int status;
+    	waitpid(pid, &status, 0);
+    	
+    	// Check if the command was executed successfully
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            va_end(args);
+            return true;
+        } else {
+            va_end(args);
+            return false;
+        }
+    
+    
+    
+    }
+	
+
     va_end(args);
 
     return true;
@@ -92,6 +162,72 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+
+  
+    pid_t pid = fork();
+    
+    if(pid == -1)
+    {
+    	// Fork failed
+    	perror("fork");
+    	va_end(args);
+    	return false;
+    }
+
+
+    if(pid == 0)
+    {
+    	int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    
+    
+    	if (fd == -1) {
+            perror("open");
+            va_end(args);
+            return false;
+    	}
+    	
+    	
+    	// Redirect stdout to output file
+    	if(dup2(fd, STDOUT_FILENO) == -1)
+    	{
+    		perror("dup2");
+    		close(fd);
+    		va_end(args);
+    		return false;
+    	}
+    	
+    	close(fd);
+    
+    
+    
+    	// Executed by child process
+    	execv(command[0], command);
+    	
+    	// If execv() fails
+    	perror("execv");
+    	va_end(args);
+    	return false;
+    }
+    else {
+    	// This code is executed by the parent 
+    	
+    	int status;
+    	waitpid(pid, &status, 0);
+    	
+    	// Check if the command was executed successfully
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            va_end(args);
+            return true;
+        } else {
+            va_end(args);
+            return false;
+        }
+    
+    
+    
+    }
+
+
 
     va_end(args);
 
